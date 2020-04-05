@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://addons/godwad/src/WAD_Map.gd" type="Script" id=5]
+[ext_resource path="res://addons/godwad/src/Tree.gd" type="Script" id=7]
+
+[node name="WAD_Loader" type="Node"]
+script = ExtResource( 5 )
+
+[node name="Tree" type="Tree" parent="."]
+visible = false
+margin_right = 232.0
+margin_bottom = 516.0
+script = ExtResource( 7 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+[connection signal="cell_selected" from="Tree" to="Tree" method="_on_Tree_cell_selected"]
