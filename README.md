@@ -16,3 +16,6 @@ For testing purposes there is a player controller Player.tscn
 Add the player to the tree and point its "Wad Map" parameter to the WAD_Map node.  
 ![](howToPlayer.gif)
 
+## Media 
+
+![screenshot1.png]
