@@ -18,4 +18,4 @@ Add the player to the tree and point its "Wad Map" parameter to the WAD_Map node
 
 ## Media 
 
-![screenshot1.png]
+![](screenshot1.png)
