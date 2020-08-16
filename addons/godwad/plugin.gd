@@ -79,8 +79,7 @@ func loadWad():
 
 func createMap():
 	
-	
-	
+
 	var dropdown = dock.get_node("dropdown")
 	var mapName = dropdown.get_item_text(dropdown.get_selected_id())
 	
@@ -93,7 +92,6 @@ func createMap():
 		
 		curObj.createMap(mapName)
 		recursiveOwn(curObj,get_tree().edited_scene_root)
-		
 		dock.get_node("loadingLabel").visible = false
 	else:
 		print("A map under that name already exists")

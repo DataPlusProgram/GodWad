@@ -13,6 +13,9 @@ func instance(mapnode,sectors,lines,sides,verts):
 	for sectorIndex in sectors.size():
 		var currentSector = sectors[sectorIndex]
 		var sec = secToLines[sectorIndex]
+		var tag = currentSector[6]
+		if sec == null:
+			continue
 		if sec.size() < 3:
 			print("found sector with less than 3 vertices. skiping")
 			continue
@@ -21,9 +24,11 @@ func instance(mapnode,sectors,lines,sides,verts):
 		var secNode = Spatial.new()
 		secNode.name = String(sectorIndex)
 		secNode.set_meta("floorHeight",currentSector[0])
+		secNode.set_meta("ceilingHeight",currentSector[1])
+		secNode.add_to_group("sector_tag_" + String(tag))
+		if tag!= 0:
+			parent.sectorToTagDict[String(sectorIndex)] = String(tag)
 		mapnode.add_child(secNode)
-		
-
 		
 		
 		if typeof(loops[0]) == TYPE_STRING:#unclosed sectors don't really work but we do what we can
@@ -35,8 +40,9 @@ func instance(mapnode,sectors,lines,sides,verts):
 		workingSet = null
 
 		if guessPoly != null:
-					renderLoop(currentSector,secNode,guessPoly,Vector3(0,-0.01,0))
-					guessPoly=null
+			#renderLoop(currentSector,secNode,guessPoly,Vector3(0,-0.01,0))
+			renderLoop(currentSector,secNode,guessPoly,Vector3(0,-0.01,0))
+			guessPoly=null
 
 		if loops == null:#a polygon had failed to be generated
 			continue
@@ -51,16 +57,16 @@ func instance(mapnode,sectors,lines,sides,verts):
 				children.sort_custom(self,"shapeXaxisCompare")
 				
 
-				for i in children:
-					if i.size()<3:
+				for j in children:
+					if j.size()<3:
 						print("found a sub area with less than 3 vertices")
 						continue
 
-					workingSet = createCanal(workingSet,i,String(sectorIndex))
+					workingSet = createCanal(workingSet,j,String(sectorIndex))
 					
 					
-				#workingSet = easeOverlapping(workingSet)
-				#removeUnnecessaryVerts(workingSet)
+				workingSet = easeOverlapping(workingSet)
+				removeUnnecessaryVerts(workingSet)
 				#createDbgPoly(workingSet,sectorIndex)
 				renderLoop(currentSector,secNode,workingSet)
 				
@@ -168,7 +174,6 @@ func createCanal(shape1,shape2,dbgName = null):
 	combinedPoly = s1Before + [shape1closestVert] + s2combine + [newS1EndPoint]  + s1Sfter 
 	
 	
-
 	removeDuplicateVerts(combinedPoly)
 	removeUnnecessaryVerts(combinedPoly)
 #	createDbgPoly(combinedPoly,dbgName)
@@ -188,12 +193,14 @@ func getLoopAsVerts(loop,verts):
 
 func renderLoop(currentSector,sectorNode,verts,offset = Vector3(0,0,0)):
 	
-	#if verts.size() > 10:
-	#	breakpoint
+
 	var vertArray= triangulate(verts)
 	if vertArray == []:
 		vertArray = Geometry.convex_hull_2d(verts)
 		vertArray = triangulate(vertArray)
+	
+	if vertArray == []:
+		return
 	
 	var floorHeight = currentSector[0]
 	var ceilHeight = currentSector[1]
@@ -211,17 +218,16 @@ func renderLoop(currentSector,sectorNode,verts,offset = Vector3(0,0,0)):
 	#	floorTexture = null
 
 
-
-
 	var dim = Vector3(-INF,0,-INF)
 	var mini = Vector3(INF,0,INF)
 	var finalArr =[]#= [vertArray]
+	var origin = offset#Vector3(vertArray[0].x,0,vertArray[0].y) + offset
 	#$"../draw".add_poly(vertArray)
-	
+
 	for i in vertArray.size()/3:
-		var t1 = Vector3(vertArray[i*3].x,0,vertArray[i*3].y) + offset
-		var t2 = Vector3(vertArray[i*3+1].x,0,vertArray[i*3+1].y) + offset
-		var t3 = Vector3(vertArray[i*3+2].x,0,vertArray[i*3+2].y) + offset
+		var t1 = Vector3(vertArray[i*3].x,0,vertArray[i*3].y)  - origin
+		var t2 = Vector3(vertArray[i*3+1].x,0,vertArray[i*3+1].y) - origin
+		var t3 = Vector3(vertArray[i*3+2].x,0,vertArray[i*3+2].y) - origin
 		
 		if t1.x > dim.x: dim.x = t1.x
 		if t2.x > dim.x: dim.x = t2.x
@@ -241,25 +247,29 @@ func renderLoop(currentSector,sectorNode,verts,offset = Vector3(0,0,0)):
 		finalArr.append(t1)
 		finalArr.append(t2)
 		finalArr.append(t3)
-		
+	
+	var light = currentSector[4]
+	
 	if floorTexture!= null:
-		var floorMesh = createFloorMesh(finalArr,floorHeight,1,dim,mini,currentSector[2],floorTexture)
+		var floorMesh = createFloorMesh(finalArr,floorHeight,1,dim,mini,currentSector[2],floorTexture,light)
 		floorMesh.create_trimesh_collision()
 		floorMesh.name = currentSector[2]
-		
-		#var packed_scene = PackedScene.new()
-		#packed_scene.pack(floorMesh)
-		#ResourceSaver.save("res://debug_output/%s.tscn" %currentSector[2], packed_scene)
-		
+		floorMesh.translation = (origin + Vector3(0,floorHeight,0))*parent.scaleFactor 
+		floorMesh.get_node("_col").set_meta("floor","true")
+		floorMesh.set_meta("floor","true")
+		floorMesh.add_to_group(sectorNode.name)
 		sectorNode.add_child(floorMesh)
-
+		floorMesh.get_child(0).set_collision_layer_bit(1,1)
 	
 	
 	if ceilTexture!=null:
-		var ceilMesh = createFloorMesh(finalArr,ceilHeight,-1,dim,mini,currentSector[3],ceilTexture)
-
+		var ceilMesh = createFloorMesh(finalArr,ceilHeight,-1,dim,mini,currentSector[3],ceilTexture,light)
 		ceilMesh.create_trimesh_collision()
+		ceilMesh.get_node("_col").set_meta("ceil","true")
+		ceilMesh.set_meta("ceil","true")
 		ceilMesh.name = currentSector[3]
+		#ceilMesh.translation = origin * parent.scaleFactor 
+		ceilMesh.translation = (origin + Vector3(0,ceilHeight,0))*parent.scaleFactor 
 		sectorNode.add_child(ceilMesh)
 		
 	
@@ -269,7 +279,7 @@ func renderLoop(currentSector,sectorNode,verts,offset = Vector3(0,0,0)):
 	
 	
 	
-func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,color = Color.blue):
+func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,sectorLight = 0):
 	var surf = SurfaceTool.new()
 	var tmpMesh = Mesh.new()
 	var scaleFactor = parent.scaleFactor 
@@ -277,22 +287,11 @@ func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,color = 
 	var mat = null
 	var textureKey = textureName
 	
-	if materialCache.has(textureKey):
-		mat = materialCache[textureKey]
+	if !parent.useShaderMaterials:
+		mat = parent.levelInstancer.generateMaterialSpatial(Vector2.ZERO,texture)
 	else:
-		mat = SpatialMaterial.new()
-	
-		if texture != null:
-			mat.albedo_texture = texture
-		else:
-			mat.albedo_color = Color.red
-	
+		mat = parent.levelInstancer.generateMaterialShader(Vector2.ZERO,texture,Vector2.ZERO,sectorLight)
 
-		mat.flags_unshaded = true
-		
-		mat.uv1_scale /= scaleFactor
-		materialCache[textureKey] = mat
-		
 	surf.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surf.set_material(mat)
  
@@ -301,7 +300,7 @@ func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,color = 
 		arr.invert()
 	var count = 0
 	for v in arr:
-		#v.z -= dir
+		
 		surf.add_normal(Vector3(0,-dir,0))
 		if texture.get_width() != 0 and texture.get_height()!=0:
 
@@ -315,12 +314,12 @@ func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,color = 
 	surf.commit(tmpMesh)
 	var meshNode = MeshInstance.new()
 	meshNode.mesh = tmpMesh
-	meshNode.translation.y = height*scaleFactor
 	
 	
 	
 	return meshNode
 
+	
 func triangulate(arr):
 	var triangualted = Geometry.triangulate_polygon(arr)
 	#var triangualted = Geometry.triangulate_delaunay_2d(arr)
@@ -368,7 +367,7 @@ func createSectorClosedLoop(sec):
 			i = -1
 			#commitToLoop(soup[0],curloop,soup)
 		
-		if fetch == false:
+		if fetch == false:#we ran out of lines to process
 			if curloop.back()[1] == curloop.front()[0]:
 				loops.append(curloop)
 				curloop = []
@@ -385,6 +384,52 @@ func createSectorClosedLoop(sec):
 				return(loops)
 		
 		i+=1
+		
+func createSectorClosedLoop2(sec):
+	var soup = sec.duplicate(true)
+	var loops = []
+	var curloop = []
+	var badVerts = []
+	var first = [INF,INF]
+	var fetch = true
+	for line in sec:
+		if line[0] < first[0]:#get the smallest vertex indice
+			first = line
+			
+
+	commitToLoop(first,curloop,soup)
+	var i = 0
+	while(true):
+		var check = soup[i]
+		if curloop.back()[1] == check[0]:
+			fetch = commitToLoop(soup[i],curloop,soup)
+			i=0
+		
+		if curloop.front()[0] == soup.back()[1] and curloop.size() > 2:
+			loops.append(curloop)
+			curloop = []
+			i = 0
+			fetch = commitToLoop(soup[i],curloop,soup)
+		
+		if i+1 == soup.size():
+			badVerts = badVerts + curloop
+			curloop = []
+			fetch = commitToLoop(soup[0],curloop,soup)
+			i=0
+		
+		if fetch == false:#soup.size() == 0
+			if badVerts.size()>0:
+				return(["fail",loops,badVerts])
+				
+			else:
+				if loops.empty():
+					breakpoint
+				return(loops)
+			
+		
+		i+=1
+	
+
 	
 func commitToLoop(value,curLoop,soup):
 	curLoop.append(value)
@@ -396,9 +441,11 @@ func commitToLoop(value,curLoop,soup):
 
 
 func crateSectorToLineArray(sectors,lines,sides):
+	var linNum = 0
 	var sectorLines = []
 	sectorLines.resize(sectors.size())
 	for line in lines:
+		#print(linNum)
 		var frontSideIndex = line[5]
 		var backSideIndex = line[6]
 		
@@ -416,6 +463,8 @@ func crateSectorToLineArray(sectors,lines,sides):
 			if typeof(sectorLines[sectorId]) != TYPE_ARRAY: sectorLines[sectorId] = []
 			var sliced = line.slice(0,1)
 			sectorLines[backSide[5]].append([sliced[1],sliced[0]])
+			
+		linNum += 1
 	return sectorLines
 
 func createTree(loops):

@@ -1,16 +1,14 @@
 tool
 extends Tree
-var root 
 var imagePreview = null
 var lookupDict = {}
-
+var root = null
 func _ready():
 	#hide_root = false
-	root = create_item()
-	root.set_text(0,"root")
+	self.connect("cell_selected",self,"cell_selected")
 	anchor_right = 0.25
 	anchor_bottom = 1
-	hide_root = false
+	hide_root = true
 
 func _physics_process(delta):
 	if Input.is_action_just_pressed("ui_accept"):
@@ -35,7 +33,9 @@ func _physics_process(delta):
 		
 
 func set_dict(dict):
-	recurseAdd(dict)
+	var root = create_item()
+	root.set_text(0,"root")
+	recurseAdd(dict,root)
 
 func recurseAdd(node,parent =null):
 	var keys = node.keys()
@@ -62,7 +62,7 @@ func add(name,parent= root,meta = null):
 	return ret
 
 
-func _on_Tree_cell_selected():
+func cell_selected():
 	var meta = get_selected().get_metadata(0)
 	print(meta)
 	

@@ -56,7 +56,11 @@ class DFile:
 		var ret = data.subarray(pos,pos+(length-1)).get_string_from_ascii()
 		pos+=length
 		return ret.to_upper()
-
+	
+	#func get_line():
+	#	return data.get_line()
 	func get_len():
 		return data.size()
 		
+	func eof_reached():
+		return pos > data.size()
