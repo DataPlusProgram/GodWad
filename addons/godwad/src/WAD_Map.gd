@@ -20,6 +20,7 @@ export(Array,String,FILE) var WADs = [""] setget wadChange
 
 export var enable_multiplayer_things = false
 export var useShaderMaterials = true
+export var drawTriggers = false
 #export var runtimeOnly = false
 var runtimeOnly = true
 var ready = false
@@ -302,7 +303,6 @@ func getAllLinesOfTag(tag):
 		return [null]
 	
 	var targetSectors = null
-	var map = get_parent().get_parent().get_parent()
 	
 	targetSectors = get_tree().get_nodes_in_group("sector_tag_" + String(tag))#we get the sectors that have the tag
 	
