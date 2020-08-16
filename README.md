@@ -8,3 +8,11 @@ Go to Project->Project Settings->Plugins and set the plugins status to "Active"
 
 ## Usage
 ![](howTo.gif)
+
+
+##Player controller
+
+For testing purposes there is a player controller Player.tscn  
+Add the player to the tree and point its "Wad Map" parameter to the WAD_Map node.  
+![](howToPlayer.gif)
+
