@@ -69,7 +69,14 @@ func _ready():
 		if i!= null:
 			
 			var targetMesh = i.get_parent().get_child(1)
+			
+			if i.get_class() == "MeshInstance":
+				targetMesh = i
+			
 			var line = targetMesh.get_meta("line")
+			#if line == null:
+			#	print("door error")
+			#	return
 			var normal =  targetMesh.get_meta("normal")
 			var scaleFactor =targetMesh.get_meta("scaleFactor")
 			var diemnsion = targetMesh.get_meta("dimensions")

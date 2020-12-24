@@ -7,7 +7,7 @@ export var radiusExtension = 1.3
 onready var colShape = get_parent().shape
 onready var kneeRay = $"kneeRay"
 onready var footRay = $"footRay"
-onready var diffRay = $"diffRay"
+
 var grandparent
 # Called when the node enters the scene tree for the first time.
 
@@ -25,7 +25,7 @@ func setRays(val):
 	colShape = get_parent().shape
 	kneeRay = $"kneeRay"
 	footRay = $"footRay"
-	diffRay = $"diffRay"
+	#diffRay = $"diffRay"
 	
 	stepHeight = val
 	var halfHeight = 0.5*-colShape.height

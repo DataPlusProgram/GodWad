@@ -99,8 +99,10 @@ func parseThings(map):
 		var thingSprite = thingParts[0]
 		
 		if doomEdType == 1:
-			parent.p1Start = thingSprite.translation
-			parent.p1Rot = Vector3(0,rotation-90,0)
+			parent.set_meta("p1Start",thingSprite.translation)
+			parent.set_meta("thingSprite",Vector3(0,rotation-90,0))
+			#parent.p1Start = thingSprite.translation
+			parent.set_meta("p1Rot", Vector3(0,rotation-90,0))
 			thingSprite.queue_free()
 			continue
 		
@@ -134,8 +136,9 @@ func createEnt(sprite,pos,rotation,collisionHeight):
 	
 	
 	var info =  getFloorHeightAtPoint(pos)
-	if parent.sectorToTagDict.has(String(info["sector"])):#most sectors don't have tags
-		var sectorTag = parent.sectorToTagDict[String(info["sector"])]
+	var sectorToTagDict = parent.get_meta("sectorToTagDict")
+	if sectorToTagDict.has(String(info["sector"])):#most sectors don't have tags
+		var sectorTag = sectorToTagDict[String(info["sector"])]
 		var group = "thing_in_tag_sector_" + sectorTag
 	
 		spriteNode.add_to_group(group)
@@ -166,6 +169,10 @@ func getFloorHeightAtPoint(point):
 	rc.force_raycast_update()
 	
 	var colY = rc.get_collision_point().y
+	
+	if rc.get_collider() == null:
+		return {"height":0,"sector":0}
+		
 	var gp = rc.get_collider().get_parent().get_parent()
 	#print(gp.name)
 	

@@ -26,11 +26,9 @@ func make_visible(visible: bool) -> void:
 
 func _exit_tree():
 	remove_custom_type("WAD_Map")
-	#remove_control_from_docks(dock)
-
 	remove_control_from_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_MENU,dock)
 	dock.free()
-	pass
+
 
 
 func edit(object):
@@ -54,9 +52,9 @@ func edit(object):
 		dropdown.visible = false
 		dock.get_node("createMap").visible = false
 
-func setMapNode(target,mapName):
+#func setMapNode(target,mapName):
 	
-	recursiveOwn(target,get_tree().edited_scene_root)
+#	recursiveOwn(target,get_tree().edited_scene_root)
 
 	
 

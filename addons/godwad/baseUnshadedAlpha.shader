@@ -1,0 +1,39 @@
+shader_type spatial;
+render_mode unshaded ,depth_draw_alpha_prepass;
+
+uniform vec3 uv_scale = vec3(1,1,0); 
+uniform vec2 uv_offset = vec2(0,0);
+uniform sampler2D texture_albedo;//: hint_albedo;
+uniform sampler2D color_map : hint_albedo;
+uniform vec2 scrolling = vec2(0,0);
+
+
+void vertex() {
+	
+	UV *= uv_scale.xy;
+	UV += uv_offset;
+	
+	if (scrolling.x != 0.0)
+		UV.x += -scrolling.x*TIME*0.15;
+		
+	if (scrolling.y != 0.0)
+		UV.y += scrolling.y*TIME*0.15;
+
+}
+
+void fragment()
+{
+	vec2 base_uv = UV;
+	vec2 texelCords;
+	
+
+	vec4 albedo_tex = texture(texture_albedo,base_uv);
+	int index = int(albedo_tex.r*255.0);
+	
+
+	vec4 pix = texelFetch(color_map, ivec2(index, 0),0);
+	
+	ALPHA = albedo_tex.a;
+	ALBEDO = pix.rgb;
+
+}

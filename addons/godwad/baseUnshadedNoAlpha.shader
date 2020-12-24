@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded,depth_draw_alpha_prepass;
+render_mode unshaded;
 
 uniform vec3 uv_scale = vec3(1,1,0); 
 uniform vec2 uv_offset = vec2(0,0);
@@ -33,7 +33,7 @@ void fragment()
 
 	vec4 pix = texelFetch(color_map, ivec2(index, 0),0);
 	
-	ALPHA = albedo_tex.a;
+	//ALPHA = albedo_tex.a;
 	ALBEDO = pix.rgb;
 
 }

@@ -54,7 +54,7 @@ func parse(_file,lumpName,lumpData):
 	
 	elif lumpName.substr(0,2) == "D_":
 		lumpData[3] = readDS(_file,lumpData[1],lumpData[2])
-		lumpData[3] = readMIDIknockoff(_file,lumpData[1],lumpData[2])
+		lumpData[3] = readMIDI(_file,lumpData[1],lumpData[2])
 		#lumpData[3] = readBlockmap(_file,lumpData[1],lumpData[2])
 	
 	
@@ -321,8 +321,7 @@ func readDS(_file,offset,size):
 	for i in range(0,numberOfSamples - 4):#4 bytes of padding at end of sample:
 		data.append(_file.get_8()-128)
 		
-	#print(sampleRate)
-		
+
 	audio.data = data
 	audioPlayer.stream  = audio
 	#parent.add_child(audioPlayer)
@@ -332,9 +331,8 @@ func readDS(_file,offset,size):
 	#print("%s %s %s" % [magic,sampleRate,numberOfSamples])
 	return audioPlayer
 
-func readMIDIknockoff(_file,offset,size):
+func readMIDI(_file,offset,size):
 	_file.seek(offset)
-	
 	var magic = _file.get_String(4)
 	var totalSize = _file.get_16()
 	var startOffset = _file.get_16()
@@ -346,7 +344,9 @@ func readMIDIknockoff(_file,offset,size):
 	
 	_file.seek(startOffset)
 	var data = _file.get_8()
-	var type = (data >> 4) |  0b00000111
+	var channelNumber = data | 0b00001111
+	var event         = data | 0b01110000
+	var last          = data | 0b10000000
 	#print("%s %s" % [data >> 4,type])
 	#print(numPrimanyChannels)
 	return

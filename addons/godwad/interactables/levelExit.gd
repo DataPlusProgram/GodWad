@@ -15,7 +15,9 @@ func _ready():
 func body_entered(body):
 
 	if body.get_class() != "StaticBody":
-		map.queue_free()
+		var mapParent = map.get_parent()
+		mapParent.deleteMap(map)
+		
 		var t = getFormat(map.name)
 		var nextMap = map.name
 		if t == MAP_FORMAT.DOOM:
@@ -24,7 +26,7 @@ func body_entered(body):
 		if t == MAP_FORMAT.DDOM2:
 			nextMap = incrementDoom2Map(map.name)
 			
-		map.get_parent().createMap(nextMap)
+		mapParent.createMap(nextMap)
 		
 			
 	

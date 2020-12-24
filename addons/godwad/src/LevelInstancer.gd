@@ -10,9 +10,14 @@ var scaleFactor
 var doorVertices = []
 var doorVerticesHeights = {}
 var doorLines = []
-var allMeshNodes = {}
-var shader = null
+var shaderUnshadedNoAlpha = load("res://addons/godwad/baseUnshadedNoAlpha.shader")
+var shaderUnshadedAlpha = load("res://addons/godwad/baseUnshadedAlpha.shader")
+var shaderShadedNoAlpha = load("res://addons/godwad/baseShadedNoAlpha.shader")
+var shaderShadedAlpha = load("res://addons/godwad/baseUnshadedAlpha.shader")
 
+var baseShaded
+var emptySides = {}
+var sides = []
 enum LINDEF_FLAG{
 	BLOCK_CHARACTERS = 0x01,
 	BLOCK_MONSTERS = 0x02,
@@ -26,17 +31,6 @@ enum LINDEF_FLAG{
 	PASS_THRU = 0x200
 }
 
-
-
-
-
-enum LINDEF_TYPE{
-	DR_DOOR = 1,
-	W1_DOOR_STAY_OPEN,
-	W1_DOOR_CLOSE,
-	W1_DOOR
-	
-}
 
 enum WALL{
 	UPPER,
@@ -53,6 +47,8 @@ enum TEXTUREDRAW{
 var material = null
 var linedefDict = {}
 func instance(par,mapname,map):
+	var allMeshNodes = {}
+	var markerSides = {}
 	scaleFactor = parent.scaleFactor
 	mapNode = Spatial.new()
 	mapNode.name = mapname
@@ -64,7 +60,7 @@ func instance(par,mapname,map):
 
 	var lines = parseMap(mapname,"LINEDEFS")
 	var verts =  parseMap(mapname,"VERTEXES")
-	var sides =parseMap(mapname,"SIDEDEFS")
+	sides =parseMap(mapname,"SIDEDEFS")
 	var sectors = parseMap(mapname,"SECTORS") 
 	
 	#var segs = parseMap(mapname,"SEGS")
@@ -77,7 +73,17 @@ func instance(par,mapname,map):
 	
 	for line in lines:
 		var lindefIndex = lines.find(line)
+		
+		if line[0] > verts.size():
+			print("vert out of bounds")
+			continue
+	
 		var startVert = verts[line[0]]
+		
+		if line[1] > verts.size():
+			print("vert out of bounds")
+			continue
+		
 		var endVert = verts[line[1]]
 		var flags = line[2]
 		var type = line[3]
@@ -88,68 +94,96 @@ func instance(par,mapname,map):
 		var backSide = null
 		var doubleSided = (flags & LINDEF_FLAG.TWO_SIDED) != 0
 		
-		if frontSideIndex != 65535 : frontSide = sides[frontSideIndex]	
-		if backSideIndex != 65535 : backSide = sides[backSideIndex]
-		
-		if isDoor(type):
-			registerDoor(startVert,endVert)
+		if frontSideIndex < sides.size() : frontSide = sides[frontSideIndex]	
+		if backSideIndex < sides.size() : backSide = sides[backSideIndex]
+		#if lindefIndex == 5:
+		#	breakpoint
+		#if isDoor(type):
+		#	registerDoor(startVert,endVert)
 			
 			
 		var lowerUnpegged = (flags &  LINDEF_FLAG.LOWER_UNPEGGED) != 0
+
 		if frontSide:
-			var meshNode = drawSideDef(sectors,startVert,endVert,frontSide,backSide,lindefIndex,flags,type)
+			var meshNode = drawSideDef(sectors,startVert,endVert,frontSide,backSide,lindefIndex,flags,type,frontSideIndex,backSideIndex)
 			meshNode["isBackSide"] = false
 			meshNode["type"] = type
 			meshNode["linedefIndex"] = lindefIndex
 			meshNode["sector"] = frontSide[5]
+			meshNode["floorZ"] = sectors[frontSide[5]][0] * scaleFactor
+			meshNode["light"] = sectors[frontSide[5]][4]
+			meshNode["startVert"] = startVert
+			meshNode["endVert"] = endVert
+			allMeshNodes[frontSideIndex] = meshNode
 			allMeshNodes[frontSideIndex] = meshNode
 			
-			setMeta(meshNode,"floor",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided)
-			setMeta(meshNode,"mid",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided)
-			setMeta(meshNode,"ceil",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided)
+			setMeta(meshNode,"low",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,frontSideIndex)
+			setMeta(meshNode,"mid",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,frontSideIndex)
+			setMeta(meshNode,"high",sectors,frontSide,backSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,frontSideIndex)
 			
 			
 			if backSide:
-				if meshNode.has("floor"): 
-					meshNode["floor"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]))
+				var flag = false
+				if meshNode.has("low"): 
+					meshNode["low"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]),true)
+					flag = true
 				if meshNode.has("mid"):   
-					meshNode["mid"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]))
-				if meshNode.has("ceil"):  
-					meshNode["ceil"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]))
+					meshNode["mid"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]),true)
+					flag = true
+				if meshNode.has("high"):  
+					meshNode["high"]["meshNode"].add_to_group("neighbourSector" + String(backSide[5]),true)
+					flag = true
 					
-
-			#if (isDoor(type) or isLift(type))  and meshNode != null:
-			#	createInteractionHitbox(meshNode,lindefIndex,type)
-
-			
+				if flag == false:
+				#	var markerNode = Node.new()
+				#	parent.getSector(meshNode["sector"]).add_child(markerNode)
+					#markerNode.add_to_group("neighbourSector" + String(backSide[5]),true)
+					
+					#if !markerSides.has(["neighbourSector" + String(backSide[5])]):
+					#	markerSides["neighbourSector" + String(backSide[5])] = []
+					markerSides["neighbourSector" + String(backSide[5])] = (meshNode["sector"])
+					#breakpoint
 			
 		if backSide:
-			var meshNode = drawSideDef(sectors,endVert,startVert,backSide,frontSide,lindefIndex,flags,type)
+			var meshNode = drawSideDef(sectors,endVert,startVert,backSide,frontSide,lindefIndex,flags,type,backSideIndex,frontSideIndex)
 			meshNode["isBackSide"] = true
 			meshNode["type"] = type
 			meshNode["linedefIndex"] = lindefIndex
 			meshNode["sector"] = backSide[5]
+			meshNode["floorZ"] = sectors[backSide[5]][0] * scaleFactor
+			meshNode["light"] = sectors[backSide[5]][4]
+			meshNode["startVert"] = startVert
+			meshNode["endVert"] = endVert
 			allMeshNodes[backSideIndex] = meshNode
 			
-			setMeta(meshNode,"floor",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided)
-			setMeta(meshNode,"mid",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided)
-			setMeta(meshNode,"ceil",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided)
+			setMeta(meshNode,"low",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,backSideIndex)
+			setMeta(meshNode,"mid",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,backSideIndex)
+			setMeta(meshNode,"high",sectors,backSide,frontSide,startVert,endVert,tag,backSideIndex,doubleSided,lindefIndex,backSideIndex)
 			
 			if frontSide:
-				if meshNode.has("floor"):
-					meshNode["floor"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]))
+				var flag = false
+				if meshNode.has("low"):
+					meshNode["low"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]),true)
 					
 					
 				if meshNode.has("mid"):
-					meshNode["mid"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]))
+					meshNode["mid"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]),true)
 				
 					
-				if meshNode.has("ceil"):
-					meshNode["ceil"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]))
+				if meshNode.has("high"):
+					meshNode["high"]["meshNode"].add_to_group("neighbourSector" + String(frontSide[5]),true)
 					
+				if flag == false:
+					
+					#if !markerSides.has(["neighbourSector" + String(frontSide[5])]):
+					#	markerSides["neighbourSector" + String(frontSide[5])] = []
+					markerSides["neighbourSector" + String(frontSide[5])] = (meshNode["sector"])
+					#var markerNode = Node.new()
+					#parent.getSector(meshNode["sector"]).add_child(markerNode)
+					#markerNode.add_to_group("neighbourSector" + String(frontSide[5]),true)
 	
-	
-	createDoorSideWalls(lines,verts,sides,sectors)
+	setParentMetas(allMeshNodes,emptySides,markerSides)
+#	createDoorSideWalls(lines,verts,sides,sectors)
 	
 	if parent.create_entites == true:
 		parent.thingInstancer.parseThings(map)#you have to create things first before scripts because the teleport script will reference the teleport destination thing
@@ -158,13 +192,19 @@ func instance(par,mapname,map):
 		for meshDict in allMeshNodes:
 			parent.scriptLoader.addFunction(allMeshNodes[meshDict])
 	
-	
-	
-		
-	parent.allSideDefs = allMeshNodes
+
 	parent.g.timings["map creation time"] =  OS.get_ticks_msec() - parent.g.timings["map creation time"]
 
-	
+
+func setParentMetas(allSideDefs,emptySides,markerSides):
+	parent.set_meta("allSideDefs", allSideDefs)
+	parent.set_meta("emptySides",emptySides)
+	parent.set_meta("markerSides",markerSides)
+
+func unsetParentMetas():
+	parent.set_meta("allSideDefs", null)
+	parent.set_meta("emptySides",null)
+	parent.set_meta("markerSides",null)
 
 func registerDoor(startVert,endVert):
 	if !doorVertices.has(startVert):
@@ -175,7 +215,7 @@ func registerDoor(startVert,endVert):
 		doorLines.append([startVert,endVert])
 
 
-func setMeta(meshNode,section,sectors,frontSide,backSide,startVert,endVert,tag,oSide,isTwoSided):
+func setMeta(meshNode,section,sectors,frontSide,backSide,startVert,endVert,tag,oSide,isTwoSided,lineIndex,sidedefIndex):
 	
 	
 	if !meshNode.has(section):
@@ -194,7 +234,7 @@ func setMeta(meshNode,section,sectors,frontSide,backSide,startVert,endVert,tag,o
 		var floor2 = sectors[backSide[5]][0]
 		ceilingHeightF = max( ceil1-floor1, ceil2-floor2)
 		sectionMesh.get_parent().set_meta("ceilHeight",ceilingHeightF*parent.scaleFactor)
-		sectionMesh.set_meta("oSide",oSide)
+		#sectionMesh.set_meta("oSide",oSide)
 		
 	else:
 		sectionMesh.get_parent().set_meta("ceilHeight", (ceil1-floor1)*parent.scaleFactor)
@@ -202,27 +242,29 @@ func setMeta(meshNode,section,sectors,frontSide,backSide,startVert,endVert,tag,o
 
 		
 	#sectionMesh.get_parent().set_meta("doorCollision","")
-	sectionMesh.add_to_group("door")
+	sectionMesh.set_meta("sidedefIndex",sidedefIndex)
+	sectionMesh.add_to_group("door",true)
 	sectionMesh.set_meta("floor",floor1)
 	sectionMesh.set_meta("scaleFactor",parent.scaleFactor)
 	sectionMesh.set_meta("isTwoSided",isTwoSided)
 	sectionMesh.set_meta("line",startVert-endVert)
-	
+	sectionMesh.set_meta("lineIndex",lineIndex)
+	if sectionMesh.name == "linedef 967 top_col":
+		breakpoint
 	if frontSide:
 		sectionMesh.set_meta("normal",(startVert-endVert).normalized())
 	if backSide and !frontSide:
+	#elif backSide:
 		sectionMesh.set_meta("normal",(startVert-endVert).normalized()*-1)
 		
 	
 	sectionMesh.set_meta("dimensions",meshNode[section]["dimensions"])
 	sectionMesh.set_meta("tag",tag)
-		
+	sectionMesh.set_meta("oSide",oSide)
 
 
 
 func getTexture(name):
-	#if name == "PLATDARK":
-	#	breakpoint
 	
 	if parent.runtimeOnly:  return fetchTexture(name)
 	if !parent.runtimeOnly: return fetchTextureDisk(name)
@@ -264,6 +306,8 @@ func fetchTexture(name,debug = false):
 				textureCache[name] = animatedtextureWall(parent.imageParser.flatAnimationDict.list[name],"TEXTURE1")
 			else:
 				textureCache[name] = loadTexture(i)
+			
+			return textureCache[name]
 	
 	return null
 
@@ -398,7 +442,7 @@ func fetchFlatDisk(name):
 
 
 func loadTexture(texture,saveToDisk = false,debug = false):
-	
+
 	var image = Image.new()
 	var width = texture[2]
 	var height  = texture[3]
@@ -439,8 +483,10 @@ func loadTexture(texture,saveToDisk = false,debug = false):
 
 
 
-func drawSideDef(sectors,startVert,endVert,side,oSide,sideIndex,flags,type,backSide = false):
+func drawSideDef(sectors,startVert,endVert,side,oSide,lineIndex,flags,type,sideIndex,oSideIndex):
 	var sector = sectors[side[5]]
+	var sectorIndex = side[5]
+	#var sideIndex = sides.find(side)
 	var sectorLight = sector[4]
 	var fFloor=  sector[0]
 	var fCeil =  sector[1]
@@ -450,24 +496,8 @@ func drawSideDef(sectors,startVert,endVert,side,oSide,sideIndex,flags,type,backS
 	var doubleSided = (flags & LINDEF_FLAG.TWO_SIDED) != 0
 	var hasCollision =  true
 	var sectorNode = mapNode.get_node_or_null(String(side[5]))
-	var mesh = {}
+	var sideSections = {}
 	
-	for i in doorVertices.size():
-		#var curVert = doorVerticesHeights[i]
-		if doorVertices[i] == startVert:
-			if !doorVerticesHeights.has(i):
-				doorVerticesHeights[i] = {"floorY":fFloor,"ceilY":fCeil}
-			else:
-				if fCeil > doorVerticesHeights[i]["ceilY"]:
-					doorVerticesHeights[i]["ceilY"] = fCeil
-			
-		if doorVertices[i] == endVert:
-			if !doorVerticesHeights.has(i):
-				doorVerticesHeights[i] = {"floorY":fFloor,"ceilY":fCeil}
-			else:  
-				if fCeil > doorVerticesHeights[i]["ceilY"]:
-					doorVerticesHeights[i]["ceilY"] = fCeil
-		
 	
 	if (flags & LINDEF_FLAG.BLOCK_CHARACTERS) == 0 and oSide != null:
 		hasCollision = false
@@ -482,10 +512,6 @@ func drawSideDef(sectors,startVert,endVert,side,oSide,sideIndex,flags,type,backS
 
 	var texture = null
 	
-	if backSide:#if backside sawp start and end 
-		var temp = startVert
-		startVert = endVert
-		endVert = temp
 	
 	var temp = null
 	if lowerUnpegged:#if you are lower unpegged and not a mid then the texture starts from your ceiling
@@ -506,20 +532,31 @@ func drawSideDef(sectors,startVert,endVert,side,oSide,sideIndex,flags,type,backS
 	var midTexture = side[4]
 	var lowerTexture = side[3]
 	var upperTexture = side[2]
+	sideSections["textures"] = {"low":lowerTexture,"mid":midTexture,"high":upperTexture}
+	var empty = true
 	
 	
 	if midTexture == '-' and lowerTexture == '-'  and upperTexture == '-' and type !=0 :
 		texture = load("res://addons/godwad/assets/noTexture.png")
-		mesh["mid"] = createWall(startVert,endVert,fFloor,fCeil+0.1,midDraw,offset,sectorNode,sideIndex,hasCollision,texture,fCeil,"mid",type,sectorLight)#0.1 is to prevent pixel leak
-		return mesh
+		var wallNode = createWall(startVert,endVert,fFloor,fCeil+0.1,midDraw,offset,hasCollision,texture,fCeil,String(lineIndex)+" mid",type,sectorLight)#0.1 is to prevent pixel leak
+		instanceSection(sectorNode,sideSections,wallNode,"mid")
+		return sideSections
+		
 	
 	#!double sided ignores all but the middle section
 	if !doubleSided or oSide==null:#any line with nothing behind it is treated as !double sided
-		if parent.runtimeOnly:  texture = fetchTexture(side[4])
-		if !parent.runtimeOnly: texture = fetchTextureDisk(side[4])
-		mesh["mid"] = createWall(startVert,endVert,fFloor,fCeil+0.1,midDraw,offset,sectorNode,sideIndex,hasCollision,texture,fCeil,"mid",type,sectorLight)#0.1 is to prevent pixel leak
+		texture = fetchTexture(side[4])
+		var wallNode = createWall(startVert,endVert,fFloor,fCeil+0.1,midDraw,offset,hasCollision,texture,fCeil,String(lineIndex)+" mid",type,sectorLight)#0.1 is to prevent pixel leak
+		instanceSection(sectorNode,sideSections,wallNode,"mid")
 		
-		return mesh
+
+		if fFloor==fCeil:
+			var textures = {"low":lowerTexture,"mid":midTexture,"high":upperTexture}
+			emptySides[lineIndex] = {"startVert":startVert*scaleFactor,"endVert":endVert*scaleFactor,"textures":textures,"floorZ":fFloor,"sector":sectorIndex,"light":sectorLight,"doubleSided":doubleSided}
+			if oSide != null:
+				emptySides[lineIndex]["neighbourSectorIndex"] = oSide
+		
+		return sideSections
 		
 	#once we've made it here we can gaurntee we have an opposite side
 	var oFloor= sectors[oSide[5]][0] 
@@ -533,38 +570,77 @@ func drawSideDef(sectors,startVert,endVert,side,oSide,sideIndex,flags,type,backS
 	
 	#note that refernces to floor and ceil mean the upper and lower sections of the wall not the actual floor and ceilings of a sector
 	
-	if lowFloor != highFloor:#floor section
-		texture = getTexture(side[3])
-	
+	if fFloor < oFloor:#floor section
+		texture = getTexture(side[3])	
+
 		if texture!= null:
-			mesh["floor"] = createWall(startVert,endVert,lowFloor,highFloor,floorDraw,offset,sectorNode,sideIndex,true,texture,fCeil,"low",type,sectorLight)
-	
+
+			var wallNode = createWall(startVert,endVert,lowFloor,highFloor,floorDraw,offset,true,texture,fCeil,String(lineIndex)+" low",type,sectorLight)
+			instanceSection(sectorNode,sideSections,wallNode,"low")	
+			empty = false
+			
 	if fCeil > oCeil:#ceil section
 		texture = getTexture(side[2])
 		if texture!= null:
-			mesh["ceil"] = createWall(startVert,endVert,lowCeil,highCeil,ceilDraw,offset,sectorNode,sideIndex,true,texture,fCeil,"top",type,sectorLight)
-	
+			
+			var wallNode = createWall(startVert,endVert,lowCeil,highCeil,ceilDraw,offset,true,texture,fCeil,String(lineIndex)+" top",type,sectorLight)
+			instanceSection(sectorNode,sideSections,wallNode,"high")
+			empty = false
 	#now we just need to deal with floating mid sections
 	if !lowerUnpegged:
 		texture = getTexture(side[4])
 		if texture!= null:
 			var start = max(lowCeil-texture.get_height()+offset.y,highFloor)
-			mesh["mid"] = createWall(startVert,endVert,start,lowCeil+offset.y,midDraw,Vector2(offset.x,0),sectorNode,sideIndex,hasCollision,texture,fCeil,"mid",type,sectorLight)
-	
+			var wallNode = createWall(startVert,endVert,start,lowCeil+offset.y,midDraw,Vector2(offset.x,0),hasCollision,texture,fCeil,String(lineIndex)+" mid",type,sectorLight)
+			instanceSection(sectorNode,sideSections,wallNode,"mid")
+			empty = false
+			
 	if lowerUnpegged:
 		texture = getTexture(side[4])
 		if texture!= null:
+		
 			var start =  min(highFloor+offset.y,lowCeil)
 			var th = texture.get_height()
 			var end = min(start+texture.get_height(),lowCeil)
-			mesh["mid"] = createWall(startVert,endVert,start,end,midDraw,Vector2(offset.x,0),sectorNode,sideIndex,hasCollision,texture,fCeil,"mid",type,sectorLight)
-			
+			var wallNode = createWall(startVert,endVert,start,end,midDraw,Vector2(offset.x,0),hasCollision,texture,fCeil,String(lineIndex)+" mid",type,sectorLight)
+			instanceSection(sectorNode,sideSections,wallNode,"mid")
+			empty = false
 	
+	if empty and type != 0:
+		texture = load("res://addons/godwad/assets/noTexture.png")
+		var wallNode = createWall(startVert,endVert,fFloor,fCeil+0.1,midDraw,offset,hasCollision,texture,fCeil,String(lineIndex)+" mid",type,sectorLight)#0.1 is to prevent pixel leak
+		instanceSection(sectorNode,sideSections,wallNode,"mid")
+		#return sideSections
+		
 	
+	if empty and (midTexture != '-' or lowerTexture != '-'  or upperTexture != '-'):
+		
+		var textures = {"empty":true,"low":lowerTexture,"mid":midTexture,"high":upperTexture}
+		
+		var origin = Vector3(startVert.x,fCeil,startVert.y)
+		var normal = (startVert-endVert).normalized()
+		
+		#var TL = Vector3(startVert.x,fCeil,startVert.y) - origin
+		##var BL = Vector3(startVert.x,fFloor,startVert.y) -origin
+		#var TR = Vector3(endVert.x,fCeil,endVert.y) - origin
+		#var BR = Vector3(endVert.x,fFloor,endVert.y) - origin
 	
-	return mesh
+	#	var line1 = TL - TR
+	#	var line2 = TL - BL
+	#	var normal = -line1.cross(line2).normalized()
+		
+		emptySides[sideIndex] = {"startVert":startVert*scaleFactor,"endVert":endVert*scaleFactor,"textures":textures,"floorZ":lowFloor,"sector":sectorIndex,"light":sectorLight,"doubleSided":doubleSided,"normal":normal}
+		if doubleSided:
+			emptySides[sideIndex]["oSideIndex"] = oSideIndex
+			emptySides[sideIndex]["neighbourSector"] = (oSide[5])
+		
+	
+	return sideSections
 
 
+func instanceSection(sector,sideSections,wallNode,sectionName):
+	sector.add_child(wallNode["node"])
+	sideSections[sectionName] = wallNode["meta"]
 
 
 func generateMaterialSpatial(tOffset,texture):
@@ -583,8 +659,6 @@ func generateMaterialSpatial(tOffset,texture):
 	
 	mat.flags_unshaded = parent.unshaded
 	
-	
-	#mat.params_cull_mode = 0
 	if texture != null:
 		mat.albedo_texture = texture
 	
@@ -608,25 +682,28 @@ func generateMaterialShader(tOffset,texture,scroll,sectorLight):
 	if materialCache.has(texture)and scroll.x == 0 and scroll.y ==0:
 		if materialCache[texture].has(sectorLight):
 			if materialCache[texture][sectorLight].has(tOffset):
-				#print("retrived from cache")
 				return materialCache[texture][sectorLight][tOffset]
 	
 	#if materialCache.has(texture) and tOffset.x == 0 and tOffset.y == 0 and scroll.x == 0 and scroll.y == 0:
 	#	 return materialCache[texture]
 	
-	
-#	var mat = SpatialMaterial.new()
-	#var shader = Shader.new()
-	#var 
-	if shader == null:
-		shader = load("res://addons/godwad/base.shader")
+	var shader 
+
+	if parent.unshaded:
+		if texture.get_data().detect_alpha():
+			shader = shaderUnshadedAlpha
+		else:
+			shader = shaderUnshadedNoAlpha
+	else:
+		if texture.get_data().detect_alpha():
+			shader = shaderShadedAlpha
+		else:
+			shader = shaderShadedNoAlpha
+		
 	var mat = ShaderMaterial.new()
 	mat.shader = shader
 	
-	
-	
-	if texture.get_data().detect_alpha():
-		mat.RENDER_PRIORITY_MAX
+
 	
 	mat.set_shader_param("uv_offset", Vector2(tOffset.x / texture.get_width(),tOffset.y / texture.get_height()))
 	mat.set_shader_param("uv_scale",Vector3(1.0,1.0,0)/scaleFactor)
@@ -642,18 +719,10 @@ func generateMaterialShader(tOffset,texture,scroll,sectorLight):
 		mat.set_shader_param("texture_albedo" , texture)
 		var light = max(31-(sectorLight/8),0)
 		var colormap = parent.directories["GRAPHICS"]["COLORMAP"][3][light]
-		
 
 		mat.set_shader_param("color_map",colormap)
-		#colormap.get_data().save_png(".png")
-	
-		#mat.set_shader_param("albedo" , texture)
-	
-		
-	if texture.get_data().detect_alpha():
-		mat.set_shader_param("flags_transparent" ,true)
-		mat.set_shader_param("params_depth_draw_mode" , SpatialMaterial.DEPTH_DRAW_ALPHA_OPAQUE_PREPASS)
-			
+
+
 	if !materialCache.has(texture) and scroll.x == 0 and scroll.y ==0:
 		materialCache[texture] = {}
 	
@@ -668,16 +737,13 @@ func generateMaterialShader(tOffset,texture,scroll,sectorLight):
 	
 
 
-func createWall(start,end,floorZ,ceilZ,drawType,offset,sectorNode= -1,sideIndex=-1,hasCollision = false,texture = null,fCeil = null,nameStr = "",type = 0, sectorLight = 15):
-
-	#if texture == null:
-	#	return
-
+func createWall(start,end,floorZ,ceilZ,drawType,offset,hasCollision = false,texture = null,fCeil = null,nameStr = "",type = 0, sectorLight = 15):
+	scaleFactor = parent.scaleFactor
+	var retNode = null
 	start *= scaleFactor
 	end *= scaleFactor
 	floorZ *= scaleFactor
 	ceilZ *= scaleFactor
-	
 	
 	#ceilZ +=  0.1*scaleFactor #extra bit of height to prevent slight pixel leakage
 	var height = ceilZ-floorZ 
@@ -698,7 +764,7 @@ func createWall(start,end,floorZ,ceilZ,drawType,offset,sectorNode= -1,sideIndex=
 	
 	var line1 = TL - TR
 	var line2 = TL - BL
-	var normal = line1.cross(line2).normalized()
+	var normal = -line1.cross(line2).normalized()
 
 	var surf = SurfaceTool.new()
 	var tmpMesh = Mesh.new()
@@ -709,13 +775,11 @@ func createWall(start,end,floorZ,ceilZ,drawType,offset,sectorNode= -1,sideIndex=
 	
 	if type == 48: 
 		scroll.x = -1
-#	breakpoint
 	if type == 85: 
 		scroll.x = 1
 		
 	if type == 255:
 		scroll = offset
-	#	breakpoint
 
 	
 	if texture != null:
@@ -781,10 +845,9 @@ func createWall(start,end,floorZ,ceilZ,drawType,offset,sectorNode= -1,sideIndex=
 	
 	var meshNode = MeshInstance.new()
 	meshNode.mesh = tmpMesh
-	meshNode.name = "linedef " + String(sideIndex) + " " +  nameStr
+	meshNode.name = "linedef " + nameStr
 	
-	#if texture == null:
-	#	meshNode.visible = false
+
 	if hasCollision:#we create a static body node as a child of the mesh node but then make it the parent of the mesh node
 		meshNode.create_trimesh_collision()
 		var staticBodyNode = meshNode.get_child(0)
@@ -794,15 +857,17 @@ func createWall(start,end,floorZ,ceilZ,drawType,offset,sectorNode= -1,sideIndex=
 			staticBodyNode.add_child(meshNode)
 		else:
 			meshNode.queue_free()
-		sectorNode.add_child(staticBodyNode)
+		retNode = staticBodyNode
 		
 	else:
 		
 		meshNode.translation = origin
-		sectorNode.add_child(meshNode)
+		retNode = meshNode
+		
 
 	var width = (start - end).length()
-	return {"meshNode":meshNode,"sectorNode":sectorNode,"normal":normal,"type":type,"dimensions":Vector2(width,height),"startVert":start,"endVert":end,"floorZ":floorZ}
+	var metaDict = {"meshNode":meshNode,"normal":normal,"type":type,"dimensions":Vector2(width,height),"startVert":start,"endVert":end,"light":sectorLight,"floorZ":floorZ}
+	return {"node": retNode,"meta":metaDict}
 
 
 func createCollision(TL,TR,BL,BR):
@@ -810,9 +875,6 @@ func createCollision(TL,TR,BL,BR):
 	var shapeNode = CollisionShape.new()
 	
 	
-
-
-
 
 func fetchSprite(sprName):
 	var flags = 0
@@ -851,79 +913,3 @@ func doesFileExist(path):
 	var file = File.new();
 	return file.file_exists(path)
 
-
-	
-func createDoorSideWalls(lines,verts,sides,sectors):#The door side railings don't exist at runtime and only appear once door is opened. So we need a heruistic to find out wehich ones they are and inpmelent a special case that generates them
-	
-	for line in lines:
-		var lindefIndex = lines.find(line)
-		var startVert = verts[line[0]]
-		var endVert = verts[line[1]]
-		var flags = line[2]
-		var type = line[3]
-		var frontSideIndex = line[5]
-		var backSideIndex = line[6]
-		var frontSide = null
-		var backSide = null
-		var midDraw = TEXTUREDRAW.TOPBOTTOM
-		var doubleSided = (flags & LINDEF_FLAG.TWO_SIDED) != 0
-		
-		if frontSideIndex != 65535 : frontSide = sides[frontSideIndex]	
-		if backSideIndex != 65535 : backSide = sides[backSideIndex]
-
-		var lowerUnpegged = (flags &  LINDEF_FLAG.LOWER_UNPEGGED) != 0
-		var isDoor = false
-		if isDoor(type):
-			isDoor = true
-				
-		
-		if doorVertices.has(startVert) and doorVertices.has(endVert) and !isDoor:
-			#if frontSide:
-			#var meshNode = drawSideDef(sectors,startVert,endVert,frontSide,backSide,lindefIndex,flags)
-			var sectorNode = mapNode.get_node_or_null(String(frontSide[5]))
-			var texture = null
-			if parent.runtimeOnly:  texture = fetchTexture(frontSide[4])
-			if !parent.runtimeOnly: texture = fetchTextureDisk(frontSide[4])
-			var sector = sectors[frontSide[5]]
-			var sectorLight = sector[4]
-			
-			var startVertIndex = doorVertices.find(startVert)
-			var endVertIndex=  doorVertices.find(endVert)
-				
-			var fFloor=  doorVerticesHeights[startVertIndex]["floorY"]
-			var fCeill=  doorVerticesHeights[endVertIndex]["ceilY"]
-			
-			if texture == null:
-				print("texture\'" + frontSide[4] + "\' not found") 
-				continue
-			
-			var meshNode = createWall(startVert,endVert,fFloor,fCeill,midDraw,Vector2.ZERO,sectorNode,frontSideIndex,true,texture,fCeill,"mid",type,sectorLight)
-			setMeta(meshNode,"mid",sectors,backSide,frontSide,startVert,endVert,0,backSideIndex,doubleSided)
-			if backSide!= null:
-				meshNode.add_to_group("neighbourSector" + String(backSide[5]))
-				#createWall(startVert,endVert,fFloor,fCeil,midDraw,offset,sectorNode,sideIndex,hasCollision,texture,fCeil)
-		
-			#if backSide:
-			#	var meshNode = drawSideDef(sectors,endVert,startVert,backSide,frontSide,lindefIndex,flags)
-			
-func isDoor(type):
-	match type:
-		1,2,3,4,16,26,27,28,31,32,33,34,46,75,76,86,90,99,103,105,107,108,109,110,117,118,133,134,135,136,137:
-			return true
-	return false
-
-func isSwitch(type):
-	match type:
-		29,111,103,112,50,113,175,63,114,61,115,42,116,196:
-			return true
-	return false
-	
-func isLift(type):
-	match type:
-		62:
-			return true
-	return false
-#func createDoorRay(node,normal):
-	#RayCast.new()
-	
-	

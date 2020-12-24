@@ -3,8 +3,15 @@ var deubugCount = 0
 var vertsl= []
 var materialCache = {}
 var parent = null
+
+var shaderUnshadedNoAlpha = load("res://addons/godwad/baseUnshadedNoAlpha.shader")
+var shaderUnshadedAlpha = load("res://addons/godwad/baseUnshadedAlpha.shader")
+var shaderShaded = load("res://addons/godwad/baseShadedNoAlpha.shader")
+var shaderShadedAlpha = load("res://addons/godwad/baseUnshadedAlpha.shader")
+
 func instance(mapnode,sectors,lines,sides,verts):
-	
+	var sectorToTagDict = {}
+	var tagToSectorsDict = {}
 	parent.g.timings["floor creation time"] =  OS.get_ticks_msec() 
 	vertsl = verts
 	var secToLines = crateSectorToLineArray(sectors,lines,sides)
@@ -27,9 +34,15 @@ func instance(mapnode,sectors,lines,sides,verts):
 		secNode.set_meta("ceilingHeight",currentSector[1])
 		secNode.add_to_group("sector_tag_" + String(tag))
 		if tag!= 0:
-			parent.sectorToTagDict[String(sectorIndex)] = String(tag)
+			sectorToTagDict[String(sectorIndex)] = String(tag)
+			if !tagToSectorsDict.has(tag):
+				tagToSectorsDict[tag] = []
+				
+			tagToSectorsDict[tag].append(String(sectorIndex))
+				
 		mapnode.add_child(secNode)
-		
+		parent.set_meta("sectorToTagDict",sectorToTagDict)
+		parent.set_meta("tagToSectorsDict",tagToSectorsDict)
 		
 		if typeof(loops[0]) == TYPE_STRING:#unclosed sectors don't really work but we do what we can
 			guessPoly = guessConvexHull(loops[2])
@@ -186,6 +199,11 @@ func createCanal(shape1,shape2,dbgName = null):
 func getLoopAsVerts(loop,verts):
 	var vertArray = []
 	for i in loop:
+		
+		if i[1] > verts.size():
+			print("vert out of index")
+			continue
+		
 		var vert = verts[i[1]]
 		vertArray.append(vert)
 	return vertArray
@@ -301,7 +319,7 @@ func createFloorMesh(arr,height,dir,dim,mini,textureName,texture = null,sectorLi
 	var count = 0
 	for v in arr:
 		
-		surf.add_normal(Vector3(0,-dir,0))
+		surf.add_normal(Vector3(0,dir,0))
 		if texture.get_width() != 0 and texture.get_height()!=0:
 
 			var uvX = (v.x*scaleFactor)/texture.get_width()
@@ -450,6 +468,9 @@ func crateSectorToLineArray(sectors,lines,sides):
 		var backSideIndex = line[6]
 		
 		if frontSideIndex != 65535 : 
+			if frontSideIndex > sides.size():
+				print("index ",frontSideIndex ," out of range")
+				continue
 			var frontSide = sides[frontSideIndex]
 			var sectorId = frontSide[5]
 		
@@ -458,6 +479,11 @@ func crateSectorToLineArray(sectors,lines,sides):
 
 	
 		if backSideIndex != 65535 : 
+			
+			if backSideIndex > sides.size():
+				print("index ",backSideIndex ," out of range")
+				continue
+			
 			var backSide = sides[backSideIndex]
 			var sectorId = backSide[5]
 			if typeof(sectorLines[sectorId]) != TYPE_ARRAY: sectorLines[sectorId] = []
@@ -475,7 +501,6 @@ func createTree(loops):
 		tree.append([i,null,[]])
 
 	for i in tree.size()-1:
-		
 		for j in range(i+1,arr.size()):
 			var p1 = tree[i][0]
 			var p2 = tree[j][0]
@@ -523,11 +548,20 @@ func guessConvexHull(arr):
 	var tmp = []
 	
 	for i in arr:
-		
+		if i[0]> vertsl.size():
+			print("vert index ", i ,  "out of range")
+			continue
+			
 		if tmp.find(vertsl[i[0]]) == -1:
 			tmp.append(vertsl[i[0]])
+		
+		if i[1]> vertsl.size():
+			print("vert index ", i ,  "out of range")
+			continue	
+		
 		if tmp.find(vertsl[i[1]])  == -1:
 			tmp.append(vertsl[i[1]]) 
+		
 	var hull = Geometry.convex_hull_2d(tmp)
 	
 

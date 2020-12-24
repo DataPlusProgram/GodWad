@@ -71,7 +71,7 @@ func _ready():
 	set_meta("height",$"CollisionShape".shape.height)
 	if get_node_or_null(wadMap)!= null:
 		get_node(wadMap).connect("map_loaded",self,"map_loaded")
-		var start =  get_node(wadMap).p1Start
+		var start = get_node(wadMap).get_meta("p1Start")#get_node(wadMap).p1Start
 		if start != null:
 			translation = start
 	 # Replace with function body.
@@ -139,10 +139,10 @@ func _process(delta):
 
 	
 func map_loaded(caller,mapName):
-	if caller.p1Start == null:
+	if caller.get_meta("p1Start") == null:
 		return
-	translation = caller.p1Start + Vector3(0,$"CollisionShape".shape.height,0)
-	rotation_degrees = caller.p1Rot
+	translation = caller.get_meta("p1Start") #+ Vector3(0,$"CollisionShape".shape.height,0)
+	rotation_degrees = caller.get_meta("p1Rot")
 	
 func shoot():
 	var collider = $"Camera/RayCast".get_collider()
