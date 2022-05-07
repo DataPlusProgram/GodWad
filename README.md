@@ -1,3 +1,6 @@
+
+# THIS REPO IS NO LONGER SUPPORTED DEVELOPMENT HAS MOVED TO https://github.com/DataPlusProgram/GodotWadImporter
+
 # GodWad
 A doom WAD map importer plugin for Godot
 
